@@ -60,6 +60,8 @@ public:
 		camera.setPosition(glm::vec3(0.0f, 0.0f, -2.5f));
 		camera.setRotation(glm::vec3(0.0f, 15.0f, 0.0f));
 		camera.setPerspective(60.0f, (float)width / (float)height, 0.1f, 256.0f);
+
+		enabledDeviceExtensions.push_back(VK_KHR_MAINTENANCE2_EXTENSION_NAME);
 	}
 
 	~VulkanExample()
@@ -157,6 +159,8 @@ public:
 		VkMemoryAllocateInfo memAllocInfo = vks::initializers::memoryAllocateInfo();
 		VkMemoryRequirements memReqs = {};
 
+		assert(useStaging);
+
 		if (useStaging) {
 			// Copy data to an optimal tiled image
 			// This loads the texture data into a host local buffer that is copied to the optimal tiled image on the device
@@ -169,7 +173,7 @@ public:
 			VkBufferCreateInfo bufferCreateInfo = vks::initializers::bufferCreateInfo();
 			bufferCreateInfo.size = ktxTextureSize;
 			// This buffer is used as a transfer source for the buffer copy
-			bufferCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+			bufferCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 			bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 			VK_CHECK_RESULT(vkCreateBuffer(device, &bufferCreateInfo, nullptr, &stagingBuffer));
 
@@ -221,7 +225,11 @@ public:
 			// Set initial layout of the image to undefined
 			imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 			imageCreateInfo.extent = { texture.width, texture.height, 1 };
-			imageCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+			imageCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+
+			imageCreateInfo.usage |= VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+			//imageCreateInfo.flags |= VK_IMAGE_CREATE_EXTENDED_USAGE_BIT;
+
 			VK_CHECK_RESULT(vkCreateImage(device, &imageCreateInfo, nullptr, &texture.image));
 
 			vkGetImageMemoryRequirements(device, texture.image, &memReqs);
@@ -277,9 +285,9 @@ public:
 
 			// Once the data has been uploaded we transfer to the texture image to the shader read layout, so it can be sampled from
 			imageMemoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-			imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			imageMemoryBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
 			imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-			imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
 
 			// Insert a memory dependency at the proper pipeline stages that will execute the image layout transition
 			// Source pipeline stage is copy command execution (VK_PIPELINE_STAGE_TRANSFER_BIT)
@@ -287,11 +295,29 @@ public:
 			vkCmdPipelineBarrier(
 				copyCmd,
 				VK_PIPELINE_STAGE_TRANSFER_BIT,
-				VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+				VK_PIPELINE_STAGE_TRANSFER_BIT,
 				0,
 				0, nullptr,
 				0, nullptr,
 				1, &imageMemoryBarrier);
+
+			{
+				vkCmdCopyImageToBuffer(copyCmd, texture.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, stagingBuffer, 1, bufferCopyRegions.data());
+
+				imageMemoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+				imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+				imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+				imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+				vkCmdPipelineBarrier(
+					copyCmd,
+					VK_PIPELINE_STAGE_TRANSFER_BIT,
+					VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+					0,
+					0, nullptr,
+					0, nullptr,
+					1, &imageMemoryBarrier);
+			}
 
 			// Store current layout for later reuse
 			texture.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
