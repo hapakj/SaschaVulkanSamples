@@ -1045,7 +1045,9 @@ public:
 // OS specific main entry points
 // Most of the code base is shared for the different supported operating systems, but stuff like message handling differs
 
-#if defined(_WIN32)
+#if 1
+VULKAN_EXAMPLE_MAIN()
+#elif defined(_WIN32)
 // Windows entry point
 VulkanExample *vulkanExample;
 LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)

@@ -12,6 +12,26 @@
 /*
  * Windows
  */
+
+#define ENABLE_DEBUG_CONSOLE 1
+#if ENABLE_DEBUG_CONSOLE
+inline void allocateConsole()
+{
+	AllocConsole();
+	SetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), 0x07);
+	DeleteMenu(GetSystemMenu(GetConsoleWindow(), false), SC_CLOSE, MF_BYCOMMAND);
+	freopen("CONOUT$", "w", stderr);
+	freopen("CONOUT$", "w", stdout);
+}
+inline void freeConsole()
+{
+	FreeConsole();
+}
+#else
+inline void allocateConsole() {}
+inline void freeConsole() {}
+#endif
+
 #define VULKAN_EXAMPLE_MAIN()																		\
 VulkanExample *vulkanExample;																		\
 LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)						\
@@ -25,12 +45,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)				
 int APIENTRY WinMain(_In_ HINSTANCE hInstance, _In_opt_  HINSTANCE hPrevInstance, _In_ LPSTR, _In_ int) \
 {																									\
 	for (int32_t i = 0; i < __argc; i++) { VulkanExample::args.push_back(__argv[i]); };  			\
+    allocateConsole();                                                                              \
 	vulkanExample = new VulkanExample();															\
 	vulkanExample->initVulkan();																	\
 	vulkanExample->setupWindow(hInstance, WndProc);													\
 	vulkanExample->prepare();																		\
 	vulkanExample->renderLoop();																	\
 	delete(vulkanExample);																			\
+    freeConsole();                                                                                  \
 	return 0;																						\
 }
 
